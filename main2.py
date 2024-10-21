@@ -1,17 +1,14 @@
-import objaverse.xl as oxl
-import objaverse_xl as oxl2
+# import objaverse.xl as oxl
+# import objaverse_xl as oxl2
 import os
 import shutil
 import trimesh
 import DracoPy
 import h5py
 import numpy as np
-from scipy.spatial import KDTree
-import tempfile
 import tensorflow as tf
 import keras
 from keras.preprocessing.sequence import pad_sequences
-import tensorflow_probability as tfp
 
 # compress a mesh file using DracoPy
 def compress(mesh, compression_level=0, quantization=14):
