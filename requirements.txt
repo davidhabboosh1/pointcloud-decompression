@@ -1,0 +1,6 @@
+objaverse-xl==0.1.3
+trimesh==4.4.9
+DracoPy==1.4.0
+h5py==3.10.0
+numpy==1.26.4
+scipy==1.13.0
