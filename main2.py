@@ -52,6 +52,7 @@ def similarity(pc1, pc2):
 def loss(y_true, y_pred):
     return -similarity(tf.cast(y_true, tf.float64), tf.cast(y_pred, tf.float64))
 
+
 def handle_obj(local_path, file_identifier, sha256, metadata):
     ext = os.path.splitext(local_path)[1]
     if ext == '.blend':
@@ -67,17 +68,6 @@ def handle_obj(local_path, file_identifier, sha256, metadata):
         points = decompress(compressed).points
         
         results.append(points)
-        
-    # with FileLock('results.h5.lock'):
-    #     with h5py.File('results.h5', 'a') as f:
-    #         x_dataset = f['x']
-    #         y_dataset = f['y']
-    #         for i in range(1, len(results)):
-    #             x_dataset.resize(x_dataset.shape[0] + 1, axis=0)
-    #             y_dataset.resize(y_dataset.shape[0] + 1, axis=0)
-                
-    #             x_dataset[-1] = results[i-1]
-    #             y_dataset[-1] = results[i]
     
     filename = os.path.basename(local_path).split('.')[0]
     print(filename, flush=True)
@@ -94,8 +84,25 @@ def handle_obj(local_path, file_identifier, sha256, metadata):
 def handle_mising_object(file_identifier, sha256, metadata):
     return
 
+@keras.saving.register_keras_serializable()
+def sign_activation(x):
+    return tf.sign(x)
+
+def data_generator(file_list, batch_size=1, start=0):
+    while True:
+        for file_name in file_list:
+            with h5py.File(file_name, 'r') as f:
+                x_data = f['x'][:]
+                y_data = f['y'][:]
+                num_samples = len(x_data)
+
+                for i in range(start, num_samples, batch_size):
+                    x_batch = x_data[i:i + batch_size]
+                    y_batch = y_data[i:i + batch_size]
+                    yield x_batch, y_batch
+
 def main():
-    collect = True
+    collect = False
     train = True
     
     if collect:
@@ -103,154 +110,116 @@ def main():
             shutil.rmtree('results', ignore_errors=True)
         os.mkdir('results')
         
-        # if os.path.exists('obj_temp'):
-        #     shutil.rmtree('obj_temp', ignore_errors=True)
-        # os.mkdir('obj_temp')
-        
-        # tempfile.tempdir = 'obj_temp'
-        
-        # with h5py.File('results.h5', 'w') as f:
-        #     f.create_dataset('x', (0,), maxshape=(None,), dtype=h5py.special_dtype(vlen=np.dtype('float64')))
-        #     f.create_dataset('y', (0,), maxshape=(None,), dtype=h5py.special_dtype(vlen=np.dtype('float64')))
-        
-        # annotations = oxl.get_annotations()
-        # annotations = annotations[annotations['source'] != 'thingiverse']
-        # oxl.download_objects(annotations, handle_found_object=handle_obj, handle_missing_object=handle_mising_object)
-        
-        # downloader = oxl2.ObjaverseDownloader()
-        # annotations = downloader.get_annotations()
-        # downloader.download_objects(annotations, handle_found_object=handle_obj)
-        
-        # load the h5 file and calculate the similarity between two point clouds at some random index
-        # with h5py.File('results.h5', 'r') as f:
-        #     x = f['x']
-        #     y = f['y']
-        #     index = np.random.randint(0, x.shape[0])
-        #     print(similarity(x[index], y[index]))
-        
         for obj in ['liberty', 'cabinet', 'iphone']:
             handle_obj(f'{obj}.obj', None, None, None)
     
     if train:
-        x = []
-        y = []
-        for result in os.listdir('results'):
-            # read the h5 file
-            with h5py.File(f'results/{result}', 'r') as f:
-                for i in range(len(f['x'])):
-                    x.append(f['x'][i])
-                    y.append(f['y'][i])
-            break # TODO: remove so we process all three
+        # x = []
+        # y = []
+        # for result in os.listdir('results'):
+        #     # read the h5 file
+        #     with h5py.File(f'results/{result}', 'r') as f:
+        #         for i in range(len(f['x'])):
+        #             x.append(f['x'][i])
+        #             y.append(f['y'][i])
+        #     break #TODO: figure out a a way to get rid of this
         
-        max_len = max([len(i) for i in x])
-        x = pad_sequences(x, maxlen=max_len, dtype='float64')
-        y = pad_sequences(y, maxlen=max_len, dtype='float64')
-        
-        # create a basic cnn that overfits to these three objects
-        # TODO: maybe use Conv3D instead
-        # model = keras.Sequential([
-        #     keras.layers.Input(shape=(max_len, 3)),
-        #     keras.layers.Conv1D(64, 3, activation='relu'),
-        #     keras.layers.MaxPooling1D(2),
-        #     keras.layers.Conv1D(256, 3, activation='relu'),
-        #     keras.layers.MaxPooling1D(2),
-        #     keras.layers.Conv1D(512, 3, activation='relu'),
-        #     keras.layers.MaxPooling1D(2),
-        #     keras.layers.Conv1D(512, 3, activation='relu'),
-        #     keras.layers.MaxPooling1D(2),
-        #     keras.layers.Conv1D(32, 1, activation='relu'),
-        #     # bi-level code
-        #     keras.layers.Conv1DTranspose(32, 1, activation='relu'),
-        #     keras.layers.UpSampling1D(2),
-        #     keras.layers.Conv1DTranspose(512, 3, activation='relu'),
-        #     keras.layers.UpSampling1D(2),
-        #     keras.layers.Conv1DTranspose(512, 3, activation='relu'),
-        #     keras.layers.UpSampling1D(2),
-        #     keras.layers.Conv1DTranspose(256, 3, activation='relu'),
-        #     keras.layers.UpSampling1D(2),
-        #     keras.layers.Conv1DTranspose(64, 3, activation='relu'),
-        #     keras.layers.UpSampling1D(2),
-        #     keras.layers.Flatten(),
-        #     keras.layers.Dense(256, activation='relu'),
-        #     keras.layers.Dense(max_len * 3),
-        #     keras.layers.Reshape((max_len, 3))
-        # ])
+        # max_len = max([len(i) for i in x])
+        # x = pad_sequences(x, maxlen=max_len, dtype='float64')
+        # y = pad_sequences(y, maxlen=max_len, dtype='float64')
         
         model = keras.Sequential([
-            # Input image
-            keras.layers.Input(shape=(max_len, 3)),
+            keras.layers.Input(shape=(None, 3)),  # Input as a 1D sequence
+            keras.layers.Reshape((-1, 1, 3)),
             
-            # 64 filter 3x3 feed forward conv
-            keras.layers.Conv1D(64, 3, activation='relu'),
-            keras.layers.MaxPooling1D(2),
+            # Encoder Block
+            keras.layers.ConvLSTM1D(64, 3, padding='same', strides=1, activation='relu'),
+            keras.layers.Reshape((-1, 1, 64)),
+            keras.layers.ConvLSTM1D(256, 3, padding='same', strides=1, activation='relu'),
+            keras.layers.Reshape((-1, 1, 128)),
             
-            # 256 filter 3x3 I/P, 1x1 LSTM conv
-            keras.layers.Conv1D(256, 3, activation='relu'),
-            keras.layers.MaxPooling1D(2),
-            keras.layers.Conv1D(256, 1, activation='relu'),
-            keras.layers.LSTM(256, return_sequences=True),
+            # Bi-level code
+            keras.layers.ConvLSTM1D(32, 1, padding='same', activation='tanh'),  # Approximation for bi-level coding
+            keras.layers.Activation(sign_activation),  # Apply binary level conversion (-1, 1)
             
-            # 512 filter 3x3 I/P, 1x1 LSTM conv
-            keras.layers.Conv1D(512, 3, activation='relu'),
-            keras.layers.MaxPooling1D(2),
-            keras.layers.Conv1D(512, 1, activation='relu'),
-            keras.layers.LSTM(512, return_sequences=True),
+            # Decoder Block (using Conv1DTranspose to upsample)
+            keras.layers.Conv1DTranspose(128, 3, padding='same', strides=1, activation='relu'),
+            keras.layers.Conv1DTranspose(64, 3, padding='same', strides=1, activation='relu'),
             
-            # 512 filter 3x3 I/P, 1x1 LSTM conv
-            keras.layers.Conv1D(512, 3, activation='relu'),
-            keras.layers.MaxPooling1D(2),
-            keras.layers.Conv1D(512, 1, activation='relu'),
-            keras.layers.LSTM(512, return_sequences=True),
-            
-            # 32 filter 1x1 feed forward conv
-            keras.layers.Conv1D(32, 1, activation='relu'),
-            
-            # bi-level code
-            
-            # 32 filter 1x1 feed forward conv
-            keras.layers.Conv1DTranspose(32, 1, activation='relu'),
-            
-            # 512 filter 3x3 I/P, 1x1 LSTM conv
-            keras.layers.Conv1DTranspose(512, 3, activation='relu'),
-            keras.layers.Conv1D(512, 1, activation='relu'),
-            keras.layers.LSTM(512, return_sequences=True),
-            
-            # 512 filter 3x3 I/P, 1x1 LSTM conv
-            keras.layers.Conv1DTranspose(512, 3, activation='relu'),
-            keras.layers.Conv1D(512, 1, activation='relu'),
-            keras.layers.LSTM(512, return_sequences=True),
-            
-            # 256 filter 3x3 I/P, 1x1 LSTM conv
-            keras.layers.Conv1DTranspose(256, 3, activation='relu'),
-            keras.layers.Conv1D(256, 1, activation='relu'),
-            keras.layers.LSTM(256, return_sequences=True),
-            
-            # 128 filter 3x3 I/P, 1x1 LSTM conv
-            keras.layers.Conv1DTranspose(128, 3, activation='relu'),
-            keras.layers.Conv1D(128, 1, activation='relu'),
-            keras.layers.LSTM(128, return_sequences=True),
-            
-            # output
-            keras.layers.Flatten(),
-            keras.layers.Dense(max_len * 3),
-            keras.layers.Reshape((max_len, 3))
+            # Output layer
+            keras.layers.Conv1D(3, 1, padding='same', activation='linear'),
+            keras.layers.Reshape((-1, 3))
         ])
+        
+        # Define Sequential model
+        # model = keras.Sequential([
+        #     keras.layers.Input(shape=(None, 3)),  # Input as a 1D sequence
+        #     keras.layers.Reshape((-1, 1, 3)),
+            
+        #     # Encoder Block
+        #     keras.layers.ConvLSTM1D(64, 3, padding='same', strides=1, activation='relu'),
+        #     keras.layers.Reshape((-1, 1, 64)),
+        #     keras.layers.ConvLSTM1D(256, 3, padding='same', strides=1, activation='relu'),
+        #     keras.layers.Reshape((-1, 1, 256)),
+        #     keras.layers.ConvLSTM1D(512, 3, padding='same', strides=1, activation='relu'),
+        #     keras.layers.Reshape((-1, 1, 512)),
+        #     keras.layers.ConvLSTM1D(512, 3, padding='same', strides=1, activation='relu'),
+        #     keras.layers.Reshape((-1, 1, 512)),
+            
+        #     # Bi-level code
+        #     keras.layers.ConvLSTM1D(32, 1, padding='same', activation='tanh'),  # Approximation for bi-level coding
+        #     keras.layers.Activation(sign_activation),  # Apply binary level conversion (-1, 1)
+            
+        #     # Decoder Block (using Conv1DTranspose to upsample)
+        #     keras.layers.Conv1DTranspose(512, 1, padding='same', activation='relu'),
+        #     keras.layers.Conv1DTranspose(512, 3, padding='same', strides=1, activation='relu'),
+        #     keras.layers.Conv1DTranspose(256, 3, padding='same', strides=1, activation='relu'),
+        #     keras.layers.Conv1DTranspose(128, 3, padding='same', strides=1, activation='relu'),
+            
+        #     # Output layer
+        #     keras.layers.Conv1D(3, 1, padding='same', activation='linear'),
+        #     keras.layers.Reshape((-1, 3))
+        # ])
         
         # compile with the loss being the similarity between the two point clouds
         # model.compile(optimizer='adam', loss='mean_squared_error')
-        optimizer = keras.optimizers.Adam(learning_rate=0.1)
+        optimizer = keras.optimizers.Adam(learning_rate=0.01, clipnorm=1.0)  # Lower starting learning rate
         reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='loss', factor=0.5, patience=5, min_lr=1e-6)
+
         model.compile(optimizer=optimizer, loss=loss)
-        model.fit(x, y, epochs=100, callbacks=[reduce_lr])
+        # index = np.random.randint(0, len(x))
+        # model.fit(np.array([x[index]]), np.array([y[index]]), epochs=1000, callbacks=[reduce_lr])
+        
+        file_list = [f'results/{i}' for i in os.listdir('results')]
+        batch_size = 1
+        start_quant = 10
+        steps_per_epoch = (30 // batch_size - start_quant) * len(file_list)
+        model.fit(data_generator(file_list, batch_size, start_quant), 
+                  steps_per_epoch=steps_per_epoch, epochs=100, 
+                  callbacks=[reduce_lr], 
+                  shuffle=True
+        )
         
         model.save('model.keras')
     
     model = keras.models.load_model('model.keras')
-    index = np.random.randint(0, len(x))
-    prediction = model.predict(np.expand_dims(x[index], axis=0))
     
-    # print similarity between the prediction and the actual
-    print(similarity(y[index], prediction[0]).numpy().item())
+    for result in os.listdir('results'):
+        with h5py.File(f'results/{result}', 'r') as f:
+            # start is the quantization level of the x we want, go to 31
+            start = 12
+            x = f['x']
+            y = f['y']
+            example = x[start]
+            for i in range(start, 30):
+                example = model.predict(np.array([example]))[0]
+                print(f'Done with {i} quantization')
+            
+            print(f'On {result}:')
+            print(f'Similarity between quantization {start} and uncompressed: {similarity(y[29], x[start]).numpy().item()}')
+            print(f'Similarity between quantization 30 and uncompressed: {similarity(y[29], x[29]).numpy().item()}')
+            print(f'Similarity between prediction and uncompressed: {similarity(y[29], example).numpy().item()}')
+            print()
 
 if __name__ == '__main__':
     main()
