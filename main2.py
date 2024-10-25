@@ -144,6 +144,7 @@ def main():
         log_string(f'Loss on epoch {epoch + 1}: {loss.item()}')
 
     logger.info('End of training...')
+    torch.save(classifier.state_dict(), 'classifier.pth')
 
 if __name__ == '__main__':
     main()
