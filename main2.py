@@ -50,7 +50,7 @@ def data_generator(min_quant=0, batch_size=32):
         for _ in range(batch_size):
             rand = np.random.rand(4096, 3)
             
-            choices = list(range(min_quant, 31)) + [0]
+            choices = list(range(min_quant, 31))
             if min_quant > 0:
                 choices.append(0)
             
