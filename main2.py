@@ -50,7 +50,7 @@ def data_generator(min_quant=0, batch_size=32):
         for _ in range(batch_size):
             rand = np.random.rand(4096, 3)
             
-            choices = list(range(min_quant, 31))
+            choices = list(range(min_quant, 31)) + [0]
             if min_quant > 0:
                 choices.append(0)
             
@@ -103,6 +103,7 @@ def main():
     global_step = 0
     steps_per_epoch = 100
     batch_size = 16
+    min_quant = 30
 
     logger = logging.Logger('whatever')
 
@@ -115,7 +116,7 @@ def main():
         log_string('Epoch %d (%d/%s):' % (global_epoch + 1, epoch + 1, 100))
         classifier = classifier.train()
         
-        generator = data_generator(min_quant=0, batch_size=batch_size)
+        generator = data_generator(min_quant=min_quant, batch_size=batch_size)
         for batch_id in range(steps_per_epoch):
             points, target = next(generator)
             
