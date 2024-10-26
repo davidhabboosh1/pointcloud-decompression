@@ -83,10 +83,17 @@ def inplace_relu(m):
         m.inplace=True
 
 def main():
+    # create loss file
+    if os.path.exists('loss.txt'):
+        os.remove('loss.txt')
+    open('loss.txt', 'w').close()
+    
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
     
     classifier = pointnet2_cls_msg.get_model(4096 * 3, normal_channel=False).to(device)
+    if os.path.exists('classifier.pth'):
+        classifier.load_state_dict(torch.load('classifier.pth'))
     criterion = pointnet2_cls_msg.get_loss()
     classifier.apply(inplace_relu)
     
@@ -142,6 +149,9 @@ def main():
 
         scheduler.step()
         log_string(f'Loss on epoch {epoch + 1}: {loss.item()}')
+        
+        with open('loss.txt', 'a') as f:
+            f.write(f'{loss.item()}\n')
 
     logger.info('End of training...')
     torch.save(classifier.state_dict(), 'classifier.pth')
