@@ -1,4 +1,4 @@
-from main2 import compress, decompress
+from main2 import compress, decompress, pad_or_trim
 import torch
 from Pointnet_Pointnet2_pytorch.models import pointnet2_cls_msg
 import os
@@ -27,7 +27,15 @@ for i in range(num_rand):
         test_obj = test_obj.transpose(2, 1)
         pred, _ = classifier(test_obj, torch.Tensor([quant]).to(device))
         decompressed = torch.Tensor(decompressed).to(device)
-        test_obj = test_obj.transpose(2, 1)
-        print(f'Quantization level: {quant}, Prediction: {pred}, Pred Diff: {np.linalg.norm(decompressed - pred)}, True Diff: {np.linalg.norm(decompressed - test_obj)}')
+        
+        pred = pred.cpu().detach().numpy().reshape(4096, 3)
+        decompressed = decompressed.cpu().detach().numpy()
+        decompressed = pad_or_trim(decompressed).reshape(4096, 3)
+        test_obj = test_obj.cpu().detach().numpy().reshape(4096, 3)
+        
+        pred_diff = np.linalg.norm(decompressed - pred)
+        true_diff = np.linalg.norm(decompressed - test_obj)
+        winner = 'Pred better' if pred_diff < true_diff else 'True better'
+        print(f'Quantization level: {quant}, Pred Diff: {pred_diff}, True Diff: {true_diff}, {winner}')
         
     print()

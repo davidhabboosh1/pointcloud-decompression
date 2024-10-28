@@ -21,6 +21,7 @@ import tqdm
 
 # compress a mesh file using DracoPy
 def compress(points, compression_level=0, quantization=14):
+    points = points.copy()
     points = points.flatten()
     if quantization == 0:
         compressed = DracoPy.encode(points, compression_level=compression_level)
