@@ -78,6 +78,7 @@ def data_generator(min_quant=0, batch_size=32, random=True, shape=(4096, 3)):
                     rand = rand.to_mesh()
                 rand = rand.vertices
             
+            rand = pad_or_trim(rand, target_shape=shape)
             # rand = pad_normalize(rand, target_shape=shape)
             
             choices = list(range(min_quant, 31))
