@@ -115,6 +115,14 @@ def inplace_relu(m):
         m.inplace=True
 
 def main():
+    shape = (4096, 3)
+    global_step = 0
+    steps_per_epoch = 100
+    batch_size = 16
+    min_quant = 10
+    epochs = 100
+    random = False
+    
     # create loss file
     if os.path.exists('loss.txt'):
         with open('loss.txt', 'r') as f:
@@ -145,13 +153,6 @@ def main():
     )
     
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
-    global_step = 0
-    steps_per_epoch = 100
-    batch_size = 16
-    min_quant = 10
-    epochs = 100
-    random = True
-    shape = (4096, 3)
 
     logger = logging.Logger('whatever')
 
