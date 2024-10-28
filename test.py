@@ -27,17 +27,18 @@ def chamfer_distance(pc1, pc2):
 
 min_quant = 10
 num_rand = 1
+shape = (4096, 3)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'Using device: {device}')
 
-classifier = pointnet2_cls_msg.get_model(4096 * 3, normal_channel=False).to(device)
+classifier = pointnet2_cls_msg.get_model(shape[0] * shape[1], normal_channel=False).to(device)
 if os.path.exists('classifier.pth'):
     classifier.load_state_dict(torch.load('classifier.pth'))
 classifier.eval()
 
 for i in range(num_rand):
-    test_obj_orig = np.random.rand(4096, 3)
+    test_obj_orig = np.random.rand(*shape)
     
     for quant in range(min_quant, 31):
         compressed = compress(test_obj_orig, 10, quant)
@@ -49,9 +50,9 @@ for i in range(num_rand):
         pred, _ = classifier(test_obj, torch.Tensor([quant]).to(device))
         decompressed = torch.Tensor(decompressed).to(device)
         
-        pred = pred.cpu().detach().numpy().reshape(4096, 3)
+        pred = pred.cpu().detach().numpy().reshape(*shape)
         decompressed = decompressed.cpu().detach().numpy()
-        decompressed = pad_or_trim(decompressed).reshape(4096, 3)
+        decompressed = pad_or_trim(decompressed).reshape(*shape)
         
         pred_diff = chamfer_distance(decompressed, pred)
         true_diff = chamfer_distance(decompressed, test_obj_orig)

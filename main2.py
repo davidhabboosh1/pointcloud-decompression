@@ -49,48 +49,28 @@ def pad_or_trim(points, target_shape=(4096, 3)):
         return points[indices]
    
 def normalize_points(rand):
-    # Center the points
-    centered = rand - np.mean(rand, axis=0)
+    # make the point cloud centered at the origin
+    rand = rand - np.mean(rand, axis=0)
     
-    # Calculate the maximum distance from the center
-    max_distance = np.max(np.linalg.norm(centered, axis=1))
+    # make the point cloud fit in a unit sphere
+    max_len = np.max(np.linalg.norm(rand, axis=1))
+    rand = rand / max_len
     
-    if max_distance == 0:
-        raise ValueError('Max distance is zero, cannot normalize.')
-    
-    # Normalize to unit sphere
-    normalized = centered / max_distance
-    
-    # Scale to [0, 1] by shifting and scaling
-    # Assuming normalized points are in the range [-1, 1]
-    scaled = (normalized + 1) / 2  # Shift to [0, 2] and then scale to [0, 1]
-    
-    # Truncate or pad to 4096 points
-    scaled = pad_or_trim(scaled)
-    
-    # Error if any points are < 0 or > 1
-    if np.any(scaled < 0) or np.any(scaled > 1):
-        print(scaled)
-        raise ValueError('Points are not normalized to [0, 1].')
-    
-    if scaled.shape != (4096, 3):
-        raise ValueError('Points are not of shape (4096, 3).')
-    
-    return scaled
+    return rand
         
-def pad_normalize(points):
-    points = pad_or_trim(points)
+def pad_normalize(points, target_shape=(4096, 3)):
+    points = pad_or_trim(points, target_shape=target_shape)
     points = normalize_points(points)
     
     return points
         
-def data_generator(min_quant=0, batch_size=32, random=True):
+def data_generator(min_quant=0, batch_size=32, random=True, shape=(4096, 3)):
     while True:
         x_batch, y_batch, quantizations = [], [], []
         for _ in range(batch_size):
             if random:
                 # randomly generate 4096 points
-                rand = np.random.rand(4096, 3)
+                rand = np.random.rand(*shape)
             else:
                 # randomly choose from cabinet, iphone, and liberty.obj
                 rand = trimesh.load(np.random.choice(['cabinet.obj', 'iphone.obj', 'liberty.obj']))
@@ -98,7 +78,7 @@ def data_generator(min_quant=0, batch_size=32, random=True):
                     rand = rand.to_mesh()
                 rand = rand.vertices
             
-            rand = pad_normalize(rand)
+            # rand = pad_normalize(rand, target_shape=shape)
             
             choices = list(range(min_quant, 31))
             if min_quant > 0:
@@ -109,7 +89,7 @@ def data_generator(min_quant=0, batch_size=32, random=True):
             
             compressed = compress(rand, 10, quantization)
             x = decompress(compressed)
-            x = pad_or_trim(x)
+            x = pad_or_trim(x, target_shape=shape)
             # x = pad_normalize(x)
             
             # if quantization > 0:
@@ -149,7 +129,7 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
     
-    classifier = pointnet2_cls_msg.get_model(4096 * 3, normal_channel=False).to(device)
+    classifier = pointnet2_cls_msg.get_model(shape[0] * shape[1], normal_channel=False).to(device)
     if os.path.exists('classifier.pth'):
         classifier.load_state_dict(torch.load('classifier.pth'))
     criterion = pointnet2_cls_msg.get_loss()
@@ -170,6 +150,7 @@ def main():
     min_quant = 10
     epochs = 100
     random = True
+    shape = (4096, 3)
 
     logger = logging.Logger('whatever')
 
@@ -184,7 +165,7 @@ def main():
         log_string('Epoch %d/%s:' % (epoch + 1, epochs))
         classifier = classifier.train()
         
-        generator = data_generator(min_quant=min_quant, batch_size=batch_size, random=random)
+        generator = data_generator(min_quant=min_quant, batch_size=batch_size, random=random, shape=shape)
         for batch_id in range(steps_per_epoch):
             points, target, quantizations = next(generator)
             
