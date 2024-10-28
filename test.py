@@ -25,7 +25,7 @@ for i in range(num_rand):
         test_obj = np.expand_dims(decompressed, axis=0)
         test_obj = torch.Tensor(test_obj).to(device)
         test_obj = test_obj.transpose(2, 1)
-        pred = classifier(test_obj, torch.Tensor([quant]).to(device))[0]
+        pred = classifier(test_obj, torch.Tensor([quant]).to(device))[1].cpu().detach().numpy()
         decompressed = torch.Tensor(decompressed).to(device)
         test_obj = test_obj.transpose(2, 1)
         print(f'Quantization level: {quant}, Prediction: {pred}, Pred Diff: {np.linalg.norm(decompressed - pred)}, True Diff: {np.linalg.norm(decompressed - test_obj)}')
