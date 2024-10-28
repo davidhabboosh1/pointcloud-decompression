@@ -86,7 +86,7 @@ def pad_normalize(points):
         
 def data_generator(min_quant=0, batch_size=32, random=True):
     while True:
-        x_batch, y_batch = [], []
+        x_batch, y_batch, quantizations = [], [], []
         for _ in range(batch_size):
             if random:
                 # randomly generate 4096 points
@@ -105,6 +105,8 @@ def data_generator(min_quant=0, batch_size=32, random=True):
                 choices.append(0)
             
             quantization = np.random.choice(choices)
+            quantizations.append(quantization)
+            
             compressed = compress(rand, 10, quantization)
             x = decompress(compressed)
             x = pad_or_trim(x)
@@ -124,7 +126,7 @@ def data_generator(min_quant=0, batch_size=32, random=True):
 
         # convert to pytorch tensors
         # yield torch.Tensor(x_batch), torch.Tensor(y_batch) 
-        yield np.array(x_batch), torch.Tensor(np.array(y_batch))
+        yield np.array(x_batch), torch.Tensor(np.array(y_batch)), np.array(quantizations)
 
 def inplace_relu(m):
     classname = m.__class__.__name__
@@ -167,7 +169,7 @@ def main():
     batch_size = 16
     min_quant = 10
     epochs = 100
-    random = False
+    random = True
 
     logger = logging.Logger('whatever')
 
@@ -184,7 +186,7 @@ def main():
         
         generator = data_generator(min_quant=min_quant, batch_size=batch_size, random=random)
         for batch_id in range(steps_per_epoch):
-            points, target = next(generator)
+            points, target, quantizations = next(generator)
             
             optimizer.zero_grad()
 
@@ -195,8 +197,10 @@ def main():
             points = torch.Tensor(points).to(device)
             points = points.transpose(2, 1)
             target = target.to(device)
+            
+            quantizations = torch.Tensor(quantizations).to(device)
 
-            pred, trans_feat = classifier(points)
+            pred, trans_feat = classifier(points, quantizations)
             loss = criterion(pred, target, trans_feat)
 
             loss.backward()
