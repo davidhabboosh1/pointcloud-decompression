@@ -44,9 +44,9 @@ def pad_or_trim(points, target_shape=(4096, 3)):
         return np.vstack([points, padding])
     else:
         # Trim to the target shape
-        points = points.copy()
-        np.random.shuffle(points)
-        return points[:target_shape[0]]
+        indices = np.random.choice(points.shape[0], target_shape[0], replace=False)
+        indices.sort()
+        return points[indices]
    
 def normalize_points(rand):
     # Center the points
