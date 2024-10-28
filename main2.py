@@ -36,19 +36,69 @@ def decompress(compressed):
     return decompressed
 
 def pad_or_trim(points, target_shape=(4096, 3)):
-    if points.shape[0] < target_shape[0]:
+    if points.shape[0] == target_shape[0]:
+        return points
+    elif points.shape[0] < target_shape[0]:
         # Pad with zeros
         padding = np.zeros((target_shape[0] - points.shape[0], 3))
         return np.vstack([points, padding])
     else:
         # Trim to the target shape
+        points = points.copy()
+        np.random.shuffle(points)
         return points[:target_shape[0]]
+   
+def normalize_points(rand):
+    # Center the points
+    centered = rand - np.mean(rand, axis=0)
+    
+    # Calculate the maximum distance from the center
+    max_distance = np.max(np.linalg.norm(centered, axis=1))
+    
+    if max_distance == 0:
+        raise ValueError('Max distance is zero, cannot normalize.')
+    
+    # Normalize to unit sphere
+    normalized = centered / max_distance
+    
+    # Scale to [0, 1] by shifting and scaling
+    # Assuming normalized points are in the range [-1, 1]
+    scaled = (normalized + 1) / 2  # Shift to [0, 2] and then scale to [0, 1]
+    
+    # Truncate or pad to 4096 points
+    scaled = pad_or_trim(scaled)
+    
+    # Error if any points are < 0 or > 1
+    if np.any(scaled < 0) or np.any(scaled > 1):
+        print(scaled)
+        raise ValueError('Points are not normalized to [0, 1].')
+    
+    if scaled.shape != (4096, 3):
+        raise ValueError('Points are not of shape (4096, 3).')
+    
+    return scaled
         
-def data_generator(min_quant=0, batch_size=32):
+def pad_normalize(points):
+    points = pad_or_trim(points)
+    points = normalize_points(points)
+    
+    return points
+        
+def data_generator(min_quant=0, batch_size=32, random=True):
     while True:
         x_batch, y_batch = [], []
         for _ in range(batch_size):
-            rand = np.random.rand(4096, 3)
+            if random:
+                # randomly generate 4096 points
+                rand = np.random.rand(4096, 3)
+            else:
+                # randomly choose from cabinet, iphone, and liberty.obj
+                rand = trimesh.load(np.random.choice(['cabinet.obj', 'iphone.obj', 'liberty.obj']))
+                if isinstance(rand, trimesh.Scene):
+                    rand = rand.to_mesh()
+                rand = rand.vertices
+            
+            rand = pad_normalize(rand)
             
             choices = list(range(min_quant, 31))
             if min_quant > 0:
@@ -56,19 +106,18 @@ def data_generator(min_quant=0, batch_size=32):
             
             quantization = np.random.choice(choices)
             compressed = compress(rand, 10, quantization)
-            x = pad_or_trim(decompress(compressed))
+            x = decompress(compressed)
+            x = pad_or_trim(x)
+            # x = pad_normalize(x)
             
-            if quantization > 0:
-                compressed = compress(rand, 10, quantization + 1 if quantization < 30 else 0)
-                y = pad_or_trim(decompress(compressed))
-            else:
-                y = rand
-            
-            # y = y - x + 0.5
-            # y = np.clip(y, 0, 1)
-            # x = np.clip(x, -0.5, 0.5)
-            # y = np.clip(y, -0.5, 0.5)
-            # y = y - x + 0.5
+            # if quantization > 0:
+            #     compressed = compress(rand, 10, quantization + 1 if quantization < 30 else 0)
+            #     y = decompress(compressed)
+            #     y = pad_or_trim(y)
+            #     # y = pad_normalize(y)
+            # else:
+            #     y = rand
+            y = rand
             
             x_batch.append(x)
             y_batch.append(y.flatten())
@@ -85,7 +134,14 @@ def inplace_relu(m):
 def main():
     # create loss file
     if os.path.exists('loss.txt'):
+        with open('loss.txt', 'r') as f:
+            if os.stat('loss.txt').st_size == 0:
+                min_loss = np.inf
+            else:
+                min_loss = min(float(line) for line in f)
         os.remove('loss.txt')
+    else:
+        min_loss = np.inf
     open('loss.txt', 'w').close()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -106,11 +162,12 @@ def main():
     )
     
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
-    global_epoch = 0
     global_step = 0
     steps_per_epoch = 100
     batch_size = 16
-    min_quant = 30
+    min_quant = 10
+    epochs = 100
+    random = False
 
     logger = logging.Logger('whatever')
 
@@ -119,11 +176,13 @@ def main():
         print(str)
 
     logger.info('Start training...')
-    for epoch in range(0, 100):
-        log_string('Epoch %d (%d/%s):' % (global_epoch + 1, epoch + 1, 100))
+    for epoch in range(0, epochs):
+        epoch_loss = 0
+        
+        log_string('Epoch %d/%s:' % (epoch + 1, epochs))
         classifier = classifier.train()
         
-        generator = data_generator(min_quant=min_quant, batch_size=batch_size)
+        generator = data_generator(min_quant=min_quant, batch_size=batch_size, random=random)
         for batch_id in range(steps_per_epoch):
             points, target = next(generator)
             
@@ -144,14 +203,20 @@ def main():
             optimizer.step()
             
             log_string(f'Loss on batch {batch_id + 1}/{steps_per_epoch}: {loss.item()}')
+            epoch_loss += loss.item()
             
             global_step += 1
 
         scheduler.step()
         log_string(f'Loss on epoch {epoch + 1}: {loss.item()}')
         
+        epoch_loss /= steps_per_epoch
+        if epoch_loss < min_loss:
+            min_loss = epoch_loss
+            torch.save(classifier.state_dict(), 'classifier.pth')
+            print(f'Model saved with loss {epoch_loss}.')
         with open('loss.txt', 'a') as f:
-            f.write(f'{loss.item()}\n')
+            f.write(f'{epoch_loss}\n')
 
     logger.info('End of training...')
     torch.save(classifier.state_dict(), 'classifier.pth')
