@@ -17,7 +17,6 @@ from Pointnet_Pointnet2_pytorch.models import pointnet2_cls_msg
 from Pointnet_Pointnet2_pytorch import provider
 import torch
 import logging
-import tqdm
 
 # compress a mesh file using DracoPy
 def compress(points, compression_level=0, quantization=14):
