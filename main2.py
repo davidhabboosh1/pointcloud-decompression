@@ -13,11 +13,12 @@ from scipy.spatial import KDTree
 from keras import layers, models
 from keras.layers import Input, Conv1D, BatchNormalization, LeakyReLU, Dropout, MaxPooling1D, UpSampling1D, Add, Attention
 from keras.models import Model
-from Pointnet_Pointnet2_pytorch.models import pointnet2_cls_msg
+from Pointnet_Pointnet2_pytorch.models import pointnet2_cls_msg, pointnet2_sem_seg
 from Pointnet_Pointnet2_pytorch import provider
 import torch
 import logging
 import tqdm
+import torch.nn as nn
 
 # compress a mesh file using DracoPy
 def compress(points, compression_level=0, quantization=14):
@@ -122,7 +123,7 @@ def data_generator(min_quant=0, batch_size=32, random=True):
             y = rand
             
             x_batch.append(x)
-            y_batch.append(y.flatten())
+            y_batch.append(y)
 
         # convert to pytorch tensors
         # yield torch.Tensor(x_batch), torch.Tensor(y_batch) 
@@ -149,10 +150,19 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
     
-    classifier = pointnet2_cls_msg.get_model(4096 * 3, normal_channel=False).to(device)
+    classifier = pointnet2_sem_seg.get_model(3).to(device)
     if os.path.exists('classifier.pth'):
         classifier.load_state_dict(torch.load('classifier.pth'))
-    criterion = pointnet2_cls_msg.get_loss()
+    else:
+        classifier.load_state_dict(torch.load('Pointnet_Pointnet2_pytorch/log/sem_seg/pointnet2_sem_seg/checkpoints/best_model.pth'), strict=False)
+
+    # Freeze all layers in the model except the last one
+    # for param in list(classifier.parameters())[:-1]:
+    #     param.requires_grad = False
+
+
+    # criterion = pointnet2_sem_seg.get_loss()
+    criterion = nn.MSELoss()
     classifier.apply(inplace_relu)
     
     optimizer = torch.optim.Adam(
@@ -166,8 +176,8 @@ def main():
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
     global_step = 0
     steps_per_epoch = 100
-    batch_size = 16
-    min_quant = 10
+    batch_size = 15
+    min_quant = 30
     epochs = 100
     random = True
 
@@ -196,14 +206,21 @@ def main():
             points[:, :, 0:3] = provider.shift_point_cloud(points[:, :, 0:3])
             points = torch.Tensor(points).to(device)
             points = points.transpose(2, 1)
+            # target = target.to(device)
+
+            # target = target.argmax(dim=2)
             target = target.to(device)
             
             quantizations = torch.Tensor(quantizations).to(device)
 
-            pred, trans_feat = classifier(points, quantizations)
-            loss = criterion(pred, target, trans_feat)
+            pred, _ = classifier(points)
+
+            loss = criterion(pred, target)
 
             loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(classifier.parameters(), max_norm=1.0)
+
             optimizer.step()
             
             log_string(f'Loss on batch {batch_id + 1}/{steps_per_epoch}: {loss.item()}')
