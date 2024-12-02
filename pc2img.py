@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 import DracoPy
 from sklearn.metrics import mean_squared_error
 
-IMG_SIZE = 128
+np.random.seed(0)
+
+IMG_SIZE = 16
 
 def compress(pc, compression_level=0, quantization=14):
     if quantization == 0:
@@ -27,11 +29,11 @@ pc = np.random.rand(IMG_SIZE ** 2, 3)
 img = pc2img(pc)
 
 # Compress and decompress the point cloud
-img_compressed = compress(pc, 1, 30)
+img_compressed = compress(pc, 10, 30)
 img_decompressed = decompress(img_compressed)
 img_decompressed = pc2img(img_decompressed)
 
-# print(mean_squared_error(img, pc2img(img_decompressed)))
+print(mean_squared_error(img.flatten(), img_decompressed.flatten()))
 
 # Create a figure with two subplots side by side
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
