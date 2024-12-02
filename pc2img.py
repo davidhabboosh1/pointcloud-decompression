@@ -16,6 +16,7 @@ def decompress(compressed):
     return decompressed
 
 def pc2img(pc):
+    pc = pc[np.argsort(pc[:, 2])]
     pc = pc.reshape(16, 16, 3)
     return pc
 
@@ -24,9 +25,12 @@ pc = np.random.rand(16 ** 2, 3)
 img = pc2img(pc)
 
 # Compress and decompress the point cloud
-img_compressed = compress(pc, 0, 30)
+img_compressed = compress(pc, 1, 30)
 img_decompressed = decompress(img_compressed)
 img_decompressed = pc2img(img_decompressed)
+
+print(img)
+print(img_decompressed)
 
 # print(mean_squared_error(img, pc2img(img_decompressed)))
 
