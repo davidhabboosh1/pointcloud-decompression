@@ -128,4 +128,4 @@ model.compile(optimizer=optimizer, loss='mean_squared_error')
 imgs_decompressed = tf.convert_to_tensor(imgs_decompressed)
 imgs = tf.convert_to_tensor(imgs)
 
-model.fit(imgs_decompressed, imgs, epochs=100, batch_size=128, validation_split=0.2, callbacks=[lr_scheduler, saver])
+model.fit(imgs_decompressed, imgs, epochs=100, batch_size=32, validation_split=0.2, callbacks=[lr_scheduler, saver])
