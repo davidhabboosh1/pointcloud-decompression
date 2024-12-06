@@ -7,9 +7,10 @@ from sklearn.metrics import mean_squared_error
 import torch
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 from keras import layers, models
-import os
 from keras.callbacks import ReduceLROnPlateau, ModelCheckpoint
 import keras
 
@@ -59,11 +60,16 @@ class ImgDataset(Dataset):
 
         return img_decompressed, img_target
 
-pcs = np.random.rand(10000, IMG_SIZE ** 2, 3)
+pcs = np.random.rand(10000, IMG_SIZE ** 2, 3).astype(np.float32)
 imgs = pc2img(pcs)
 imgs_compressed = [compress(pc, 5, 30) for pc in pcs]
 imgs_decompressed = [decompress(img) for img in imgs_compressed]
-imgs_decompressed = pc2img(np.array(imgs_decompressed))
+imgs_decompressed = pc2img(np.array(imgs_decompressed, dtype=np.float32))
+
+print(f"imgs_decompressed shape: {imgs_decompressed.shape}")
+print(f"imgs shape: {imgs.shape}")
+print(f"Data type of imgs_decompressed: {imgs_decompressed.dtype}")
+print(f"Data type of imgs: {imgs.dtype}")
 
 def unet_model(input_shape=(64, 64, 3)):
     inputs = layers.Input(shape=input_shape)
@@ -84,7 +90,7 @@ def unet_model(input_shape=(64, 64, 3)):
     # Bottleneck
     b = layers.Conv2D(512, (3, 3), activation='relu', padding='same')(p3)
     b = layers.Conv2D(512, (3, 3), activation='relu', padding='same')(b)
-
+   
     # Decoder
     u3 = layers.Conv2DTranspose(256, (2, 2), strides=(2, 2), padding='same')(b)
     u3 = layers.concatenate([u3, c3])
@@ -108,8 +114,10 @@ def unet_model(input_shape=(64, 64, 3)):
 
 if os.path.exists('unet_model.keras'):
     model = models.load_model('unet_model.keras')
+    print('Loaded model from disk with shape:', model.input_shape)
 else:
     model = unet_model()
+    print('Created new model with shape:', model.input_shape)
    
 optimizer = keras.optimizers.Adam(1e-3)
 lr_scheduler = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, verbose=1, min_lr=1e-10)
