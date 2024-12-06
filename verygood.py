@@ -75,42 +75,60 @@ def unet_model(input_shape=(64, 64, 3)):
     inputs = layers.Input(shape=input_shape)
 
     # Encoder
-    c1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(inputs)
-    c1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(c1)
+    c1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
+    c1 = layers.BatchNormalization()(c1)
+    c1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(c1)
+    c1 = layers.BatchNormalization()(c1)
     p1 = layers.MaxPooling2D((2, 2))(c1)
+    p1 = layers.Dropout(0.1)(p1)
 
-    c2 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(p1)
-    c2 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(c2)
+    c2 = layers.Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(p1)
+    c2 = layers.BatchNormalization()(c2)
+    c2 = layers.Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(c2)
+    c2 = layers.BatchNormalization()(c2)
     p2 = layers.MaxPooling2D((2, 2))(c2)
+    p2 = layers.Dropout(0.2)(p2)
 
-    c3 = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(p2)
-    c3 = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(c3)
+    c3 = layers.Conv2D(256, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(p2)
+    c3 = layers.BatchNormalization()(c3)
+    c3 = layers.Conv2D(256, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(c3)
+    c3 = layers.BatchNormalization()(c3)
     p3 = layers.MaxPooling2D((2, 2))(c3)
+    p3 = layers.Dropout(0.3)(p3)
 
     # Bottleneck
-    b = layers.Conv2D(512, (3, 3), activation='relu', padding='same')(p3)
-    b = layers.Conv2D(512, (3, 3), activation='relu', padding='same')(b)
-   
+    b = layers.Conv2D(512, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(p3)
+    b = layers.BatchNormalization()(b)
+    b = layers.Conv2D(512, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(b)
+    b = layers.BatchNormalization()(b)
+
     # Decoder
-    u3 = layers.Conv2DTranspose(256, (2, 2), strides=(2, 2), padding='same')(b)
+    u3 = layers.Conv2DTranspose(256, (2, 2), strides=(2, 2), padding='same', kernel_initializer='he_normal')(b)
     u3 = layers.concatenate([u3, c3])
-    c4 = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(u3)
-    c4 = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(c4)
+    c4 = layers.Conv2D(256, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(u3)
+    c4 = layers.BatchNormalization()(c4)
+    c4 = layers.Conv2D(256, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(c4)
+    c4 = layers.BatchNormalization()(c4)
 
-    u2 = layers.Conv2DTranspose(128, (2, 2), strides=(2, 2), padding='same')(c4)
+    u2 = layers.Conv2DTranspose(128, (2, 2), strides=(2, 2), padding='same', kernel_initializer='he_normal')(c4)
     u2 = layers.concatenate([u2, c2])
-    c5 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(u2)
-    c5 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(c5)
+    c5 = layers.Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(u2)
+    c5 = layers.BatchNormalization()(c5)
+    c5 = layers.Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(c5)
+    c5 = layers.BatchNormalization()(c5)
 
-    u1 = layers.Conv2DTranspose(64, (2, 2), strides=(2, 2), padding='same')(c5)
+    u1 = layers.Conv2DTranspose(64, (2, 2), strides=(2, 2), padding='same', kernel_initializer='he_normal')(c5)
     u1 = layers.concatenate([u1, c1])
-    c6 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(u1)
-    c6 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(c6)
+    c6 = layers.Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(u1)
+    c6 = layers.BatchNormalization()(c6)
+    c6 = layers.Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(c6)
+    c6 = layers.BatchNormalization()(c6)
 
-    outputs = layers.Conv2D(3, (1, 1), activation='sigmoid')(c6)
+    outputs = layers.Conv2D(3, (1, 1), activation='sigmoid', kernel_initializer='he_normal')(c6)
 
     model = models.Model(inputs, outputs)
     return model
+
 
 if os.path.exists('unet_model.keras'):
     model = models.load_model('unet_model.keras')
@@ -128,4 +146,4 @@ model.compile(optimizer=optimizer, loss='mean_squared_error')
 imgs_decompressed = tf.convert_to_tensor(imgs_decompressed)
 imgs = tf.convert_to_tensor(imgs)
 
-model.fit(imgs_decompressed, imgs, epochs=100, batch_size=16, validation_split=0.2, callbacks=[lr_scheduler, saver])
+model.fit(imgs_decompressed, imgs, epochs=100, batch_size=8, validation_split=0.2, callbacks=[lr_scheduler, saver])
