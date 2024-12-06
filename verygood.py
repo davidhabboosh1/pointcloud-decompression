@@ -25,15 +25,15 @@ def decompress(compressed):
 def pc2img(pc):
     if len(pc.shape) == 2:
         pc = pc.reshape(1, pc.shape[0], pc.shape[1])
-        
+
     shape = pc.shape
-    
+
     z = pc[:, :, 2]
     indices = np.argsort(z, axis=1)
     pc = np.take_along_axis(pc, indices[..., None], axis=1)
-    
+
     pc = pc.reshape(shape[0], IMG_SIZE, IMG_SIZE, 3)
-    
+
     return pc
 
 class ImgDataset(Dataset):
@@ -110,7 +110,7 @@ if os.path.exists('unet_model.keras'):
     model = models.load_model('unet_model.keras')
 else:
     model = unet_model()
-   
+
 optimizer = keras.optimizers.Adam(1e-3)
 lr_scheduler = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, verbose=1, min_lr=1e-10)
 saver = ModelCheckpoint('unet_model', save_best_only=True, verbose=1, save_format='tf')
