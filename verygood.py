@@ -13,6 +13,11 @@ import tensorflow as tf
 from keras import layers, models
 from keras.callbacks import ReduceLROnPlateau, ModelCheckpoint
 import keras
+from torch import nn
+from keras.layers import Conv2D, BatchNormalization, Activation, GlobalAveragePooling2D, Dense, Multiply, add
+from keras.initializers import HeNormal
+from keras.losses import Huber
+import tensorflow_addons as tfa
 
 IMG_SIZE = 64
 
@@ -37,113 +42,65 @@ def pc2img(pc):
 
     return pc
 
-class ImgDataset(Dataset):
-    def __init__(self, decompressed_imgs, target_imgs, transform=None):
-        self.decompressed = decompressed_imgs
-        self.target = target_imgs
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.decompressed)
-
-    def __getitem__(self, idx):
-        img_decompressed = self.decompressed[idx]
-        img_target = self.target[idx]
-
-        if self.transform:
-            img_decompressed = self.transform(img_decompressed)
-            img_target = self.transform(img_target)
-
-        # Convert to float32 (if it's not already)
-        img_decompressed = img_decompressed.float()
-        img_target = img_target.float()
-
-        return img_decompressed, img_target
-
-pcs = np.random.rand(10000, IMG_SIZE ** 2, 3).astype(np.float32)
+pcs = np.random.rand(10000, IMG_SIZE ** 2, 3).astype(np.float64)
 imgs = pc2img(pcs)
 imgs_compressed = [compress(pc, 5, 30) for pc in pcs]
 imgs_decompressed = [decompress(img) for img in imgs_compressed]
-imgs_decompressed = pc2img(np.array(imgs_decompressed, dtype=np.float32))
+imgs_decompressed = pc2img(np.array(imgs_decompressed, dtype=np.float64))
+# normalize
+imgs_decompressed -= np.min(imgs_decompressed)
+imgs_decompressed /= np.max(imgs_decompressed)
+imgs -= np.min(imgs)
+imgs /= np.max(imgs)
 
 print(f"imgs_decompressed shape: {imgs_decompressed.shape}")
 print(f"imgs shape: {imgs.shape}")
 print(f"Data type of imgs_decompressed: {imgs_decompressed.dtype}")
 print(f"Data type of imgs: {imgs.dtype}")
+print(f"MSE: {mean_squared_error(imgs.flatten(), imgs_decompressed.flatten())}")
+print()
 
-def unet_model(input_shape=(64, 64, 3)):
-    inputs = layers.Input(shape=input_shape)
-
-    # Encoder
-    c1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
-    c1 = layers.BatchNormalization()(c1)
-    c1 = layers.Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(c1)
-    c1 = layers.BatchNormalization()(c1)
-    p1 = layers.MaxPooling2D((2, 2))(c1)
-    p1 = layers.Dropout(0.1)(p1)
-
-    c2 = layers.Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(p1)
-    c2 = layers.BatchNormalization()(c2)
-    c2 = layers.Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(c2)
-    c2 = layers.BatchNormalization()(c2)
-    p2 = layers.MaxPooling2D((2, 2))(c2)
-    p2 = layers.Dropout(0.2)(p2)
-
-    c3 = layers.Conv2D(256, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(p2)
-    c3 = layers.BatchNormalization()(c3)
-    c3 = layers.Conv2D(256, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(c3)
-    c3 = layers.BatchNormalization()(c3)
-    p3 = layers.MaxPooling2D((2, 2))(c3)
-    p3 = layers.Dropout(0.3)(p3)
-
-    # Bottleneck
-    b = layers.Conv2D(512, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(p3)
-    b = layers.BatchNormalization()(b)
-    b = layers.Conv2D(512, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(b)
-    b = layers.BatchNormalization()(b)
-
-    # Decoder
-    u3 = layers.Conv2DTranspose(256, (2, 2), strides=(2, 2), padding='same', kernel_initializer='he_normal')(b)
-    u3 = layers.concatenate([u3, c3])
-    c4 = layers.Conv2D(256, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(u3)
-    c4 = layers.BatchNormalization()(c4)
-    c4 = layers.Conv2D(256, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(c4)
-    c4 = layers.BatchNormalization()(c4)
-
-    u2 = layers.Conv2DTranspose(128, (2, 2), strides=(2, 2), padding='same', kernel_initializer='he_normal')(c4)
-    u2 = layers.concatenate([u2, c2])
-    c5 = layers.Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(u2)
-    c5 = layers.BatchNormalization()(c5)
-    c5 = layers.Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(c5)
-    c5 = layers.BatchNormalization()(c5)
-
-    u1 = layers.Conv2DTranspose(64, (2, 2), strides=(2, 2), padding='same', kernel_initializer='he_normal')(c5)
-    u1 = layers.concatenate([u1, c1])
-    c6 = layers.Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(u1)
-    c6 = layers.BatchNormalization()(c6)
-    c6 = layers.Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer='he_normal')(c6)
-    c6 = layers.BatchNormalization()(c6)
-
-    outputs = layers.Conv2D(3, (1, 1), activation='sigmoid', kernel_initializer='he_normal')(c6)
-
-    model = models.Model(inputs, outputs)
+def build_model(input_shape=(64, 64, 3)):
+    model = models.Sequential([
+        layers.Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=input_shape),
+        layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
+        layers.Conv2D(3, (1, 1), activation='linear', padding='same')  # Output layer
+    ])
     return model
 
+def scaled_mse(y_true, y_pred):
+    mse = tf.reduce_mean(tf.square(y_true - y_pred))
+    variance = tf.reduce_mean(tf.square(y_true - tf.reduce_mean(y_true)))
+    scaled_mse_value = mse / (variance + 1e-32) # Add epsilon to avoid division by zero
+    return scaled_mse_value
 
-if os.path.exists('unet_model.keras'):
-    model = models.load_model('unet_model.keras')
-    print('Loaded model from disk with shape:', model.input_shape)
-else:
-    model = unet_model()
+def train():
+    model = build_model()
     print('Created new model with shape:', model.input_shape)
-   
 
-optimizer = keras.optimizers.Adam(1e-3)
-lr_scheduler = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, verbose=1, min_lr=1e-10)
-saver = ModelCheckpoint('unet_model', save_best_only=True, verbose=1, save_format='tf')
-model.compile(optimizer=optimizer, loss='mean_squared_error')
+    saver = ModelCheckpoint('model', monitor='val_mse', verbose=1, save_best_only=True, save_weights_only=True, save_freq='epoch')
 
-imgs_decompressed = tf.convert_to_tensor(imgs_decompressed)
-imgs = tf.convert_to_tensor(imgs)
+    optimizer = keras.optimizers.Adam(1e-3)
+    lr_scheduler = ReduceLROnPlateau(monitor='val_mse', factor=0.5, patience=5, verbose=1, min_lr=1e-10)
+    model.compile(optimizer=optimizer, loss=scaled_mse, metrics=['mse'])
 
-model.fit(imgs_decompressed, imgs, epochs=100, batch_size=8, validation_split=0.2, callbacks=[lr_scheduler, saver])
+    imgs_decompressed = tf.convert_to_tensor(imgs_decompressed)
+    imgs = tf.convert_to_tensor(imgs)
+
+    model.fit(imgs_decompressed, imgs, epochs=10000, batch_size=1, validation_split=0.2, callbacks=[lr_scheduler, saver])
+    
+def test():
+    # load model
+    model = build_model()
+    model.load_weights('model')
+    
+    # predict
+    imgs_decompressed = tf.convert_to_tensor(imgs_decompressed)
+    imgs = tf.convert_to_tensor(imgs)
+    preds = model.predict(imgs_decompressed)
+    
+    # calculate mse with tensorflow
+    mse = mean_squared_error(imgs.numpy().flatten(), preds.flatten())
+    print(f"MSE: {mse}")
+    
+train()
