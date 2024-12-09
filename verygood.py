@@ -74,7 +74,7 @@ def scaled_mse(y_true, y_pred):
     scaled_mse_value = mse / (variance + 1e-32) # Add epsilon to avoid division by zero
     return scaled_mse_value
 
-def train():
+def train(imgs, imgs_decompressed):
     model = build_model()
     print('Created new model with shape:', model.input_shape)
 
@@ -89,7 +89,7 @@ def train():
 
     model.fit(imgs_decompressed, imgs, epochs=10000, batch_size=1, validation_split=0.2, callbacks=[lr_scheduler, saver])
     
-def test():
+def test(imgs, imgs_decompressed):
     # load model
     model = build_model()
     model.load_weights('model')
@@ -103,4 +103,4 @@ def test():
     mse = mean_squared_error(imgs.numpy().flatten(), preds.flatten())
     print(f"MSE: {mse}")
     
-train()
+train(imgs, imgs_decompressed)
